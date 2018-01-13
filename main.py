@@ -8,6 +8,8 @@ from config import cfg
 from utils import load_data
 from capsNet import CapsNet
 
+import pdb
+
 
 def save_to():
     if not os.path.exists(cfg.results):
@@ -42,6 +44,9 @@ def save_to():
 
 def train(model, supervisor, num_label):
     trX, trY, num_tr_batch, valX, valY, num_val_batch = load_data(cfg.dataset, cfg.batch_size, is_training=True)
+    if cfg.num_batch is not None:
+        num_tr_batch = cfg.num_batch
+    
     Y = valY[:num_val_batch * cfg.batch_size].reshape((-1, 1))
 
     fd_train_acc, fd_loss, fd_val_acc = save_to()
@@ -93,6 +98,9 @@ def train(model, supervisor, num_label):
 
 def evaluation(model, supervisor, num_label):
     teX, teY, num_te_batch = load_data(cfg.dataset, cfg.batch_size, is_training=False)
+    if cfg.num_batch is not None:
+        num_te_batch = cfg.num_batch
+    
     fd_test_acc = save_to()
     with supervisor.managed_session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         supervisor.saver.restore(sess, tf.train.latest_checkpoint(cfg.logdir))

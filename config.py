@@ -43,3 +43,10 @@ flags.DEFINE_integer('thread_per_gpu', 4, 'Number of preprocessing threads per t
 
 cfg = tf.app.flags.FLAGS
 # tf.logging.set_verbosity(tf.logging.INFO)
+
+
+
+############################
+#   debug setting    #
+############################
+flags.DEFINE_integer('num_batch', None, 'number of batches to run')
