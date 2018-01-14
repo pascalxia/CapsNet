@@ -9,6 +9,8 @@ from utils import load_data
 from capsNet import CapsNet
 
 import pdb
+import csv
+import pandas as pd
 
 
 def save_to():
@@ -101,6 +103,11 @@ def evaluation(model, supervisor, num_label):
     if cfg.num_batch is not None:
         num_te_batch = cfg.num_batch
     
+    #create the record table
+    act_table_name = 'activation.csv'
+    df0 = pd.DataFrame([], columns=['label', 'prediction'] + ['l_'+str(i+1) for i in range(32)])
+    df0.to_csv(act_table_name, index=False)
+    
     fd_test_acc = save_to()
     with supervisor.managed_session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         supervisor.saver.restore(sess, tf.train.latest_checkpoint(cfg.logdir))
@@ -110,8 +117,23 @@ def evaluation(model, supervisor, num_label):
         for i in tqdm(range(num_te_batch), total=num_te_batch, ncols=70, leave=False, unit='b'):
             start = i * cfg.batch_size
             end = start + cfg.batch_size
-            acc = sess.run(model.accuracy, {model.X: teX[start:end], model.labels: teY[start:end]})
+            res = sess.run([model.accuracy, model.c_IJ, model.argmax_idx], {model.X: teX[start:end], model.labels: teY[start:end]})
+            acc = res[0]
+            c_IJ = res[1]
+            argmax_idx = res[2]
+            c_I = c_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32])
+            #c_I.shape = [batch_size, 36, 32]
+            layer_I = np.max(c_I, axis=1)
+            df = np.concatenate((np.array([teY[start:end]]).T,
+                                 np.array([argmax_idx]).T,
+                                 layer_I), axis=1)
+            
             test_acc += acc
+            
+            #append record to csv
+            df = pd.DataFrame(df)
+            df.to_csv(act_table_name, mode='a', header=False, index=False)
+            
         test_acc = test_acc / (cfg.batch_size * num_te_batch)
         fd_test_acc.write(str(test_acc))
         fd_test_acc.close()
