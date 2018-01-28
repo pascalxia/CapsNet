@@ -96,6 +96,19 @@ class CapsLayer(object):
             return(capsules, c_IJ)
 
 
+def cal_cosines(v_J, u_hat):
+    # reshape & tile v_j from [batch_size ,1, 10, 16, 1] to [batch_size, 1152, 10, 16, 1]
+    # then matmul in the last tow dim: [16, 1].T x [16, 1] => [1, 1], reduce mean in the
+    # batch_size dim, resulting in [1, 1152, 10, 1, 1]
+    v_J_tiled = tf.tile(v_J, [1, 1152, 1, 1, 1])
+    u_produce_v = tf.matmul(u_hat, v_J_tiled, transpose_a=True)
+    assert u_produce_v.get_shape() == [cfg.batch_size, 1152, 10, 1, 1]
+    v_J_norm = tf.norm(v_J, axis = 3, keepdims=True)
+    u_hat_norm = tf.norm(u_hat_norm, axis = 3, keepdims=True)
+    cosines = tf.divide(tf.divide(u_produce_v, v_J_norm), u_hat_norm)
+    return cosines
+    
+
 def routing(input, b_IJ):
     ''' The routing algorithm.
 
@@ -169,8 +182,11 @@ def routing(input, b_IJ):
 
                 # b_IJ += tf.reduce_sum(u_produce_v, axis=0, keep_dims=True)
                 b_IJ += u_produce_v
+                
+                
+    cosines = cal_cosines(v_J, u_hat)
 
-    return(v_J, c_IJ)
+    return(v_J, c_IJ, cosines)
 
 
 def squash(vector):
