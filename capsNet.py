@@ -56,7 +56,7 @@ class CapsNet(object):
         # DigitCaps layer, return [batch_size, 10, 16, 1]
         with tf.variable_scope('DigitCaps_layer'):
             digitCaps = CapsLayer(num_outputs=10, vec_len=16, with_routing=True, layer_type='FC')
-            self.caps2, self.c_IJ = digitCaps(caps1)
+            self.caps2, self.c_IJ, self.cosines, self.contributions = digitCaps(caps1)
 
         # Decoder structure in Fig. 2
         # 1. Do masking, how:

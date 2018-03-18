@@ -103,10 +103,11 @@ def evaluation(model, supervisor, num_label):
     if cfg.num_batch is not None:
         num_te_batch = cfg.num_batch
     
-    #create the record table
-    act_table_name = 'activation.csv'
-    df0 = pd.DataFrame([], columns=['label', 'prediction'] + ['l_'+str(i+1) for i in range(32)])
-    df0.to_csv(act_table_name, index=False)
+    #create the record tables
+    route_table_name = 'routing.csv'
+    df0 = pd.DataFrame([], columns=['label', 'prediction'] + ['route_'+str(i+1) for i in range(32)] +\
+                                   ['contribution_'+str(i+1) for i in range(32)] + ['cosine_'+str(i+1) for i in range(32)])
+    df0.to_csv(route_table_name, index=False)
     
     fd_test_acc = save_to()
     with supervisor.managed_session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
@@ -117,22 +118,45 @@ def evaluation(model, supervisor, num_label):
         for i in tqdm(range(num_te_batch), total=num_te_batch, ncols=70, leave=False, unit='b'):
             start = i * cfg.batch_size
             end = start + cfg.batch_size
-            res = sess.run([model.accuracy, model.c_IJ, model.argmax_idx], {model.X: teX[start:end], model.labels: teY[start:end]})
+            res = sess.run([model.accuracy, model.c_IJ, model.argmax_idx, model.cosines, model.contributions], {model.X: teX[start:end], model.labels: teY[start:end]})
             acc = res[0]
             c_IJ = res[1]
             argmax_idx = res[2]
+            cosines_IJ = res[3]
+            contributions_IJ = res[4]
+            
+            #find the routings for predictions
             c_I = c_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32])
             #c_I.shape = [batch_size, 36, 32]
-            layer_I = np.max(c_I, axis=1)
+            #find which element has the biggest routing
+            inds = np.argmax(c_I, axis=1)
+            #layer_I = np.max(c_I, axis=1)
+            rountings = c_I[:, inds]
+            
+            #for cosines
+            cosines_I = cosines_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32])
+            cosines = cosines_I[:, inds]
+            
+            #for contributions
+            
+            
+            df = np.concatenate((np.array([teY[start:end]]).T,
+                                 np.array([argmax_idx]).T,
+                                 layer_I), axis=1)
+            #append record to csv
+            df = pd.DataFrame(df)
+            df.to_csv(route_table_name, mode='a', header=False, index=False)
+                                 
+            #for cosines
+            cosines_I = cosines[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32])
+            layer_I = np.max(cosines_I, axis=1)
             df = np.concatenate((np.array([teY[start:end]]).T,
                                  np.array([argmax_idx]).T,
                                  layer_I), axis=1)
             
             test_acc += acc
             
-            #append record to csv
-            df = pd.DataFrame(df)
-            df.to_csv(act_table_name, mode='a', header=False, index=False)
+            
             
         test_acc = test_acc / (cfg.batch_size * num_te_batch)
         fd_test_acc.write(str(test_acc))
