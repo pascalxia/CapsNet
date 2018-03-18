@@ -9,6 +9,7 @@ import tensorflow as tf
 from config import cfg
 from utils import get_batch_data
 from capsLayer import CapsLayer
+import pdb
 
 
 epsilon = 1e-9
@@ -21,6 +22,10 @@ class CapsNet(object):
             if is_training:
                 self.X, self.labels = get_batch_data(cfg.dataset, cfg.batch_size, cfg.num_threads)
                 self.Y = tf.one_hot(self.labels, depth=10, axis=1, dtype=tf.float32)
+                
+                self.radian = tf.placeholder(tf.float32, shape=(cfg.batch_size,))
+                self.origX = self.X
+                self.X = tf.contrib.image.rotate(self.X, self.radian)
 
                 self.build_arch()
                 self.loss()

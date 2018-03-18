@@ -2,9 +2,11 @@ import os
 import scipy
 import numpy as np
 import tensorflow as tf
+import pdb
 
 
 def load_mnist(batch_size, is_training=True):
+
     path = os.path.join('data', 'mnist')
     if is_training:
         fd = open(os.path.join(path, 'train-images-idx3-ubyte'))

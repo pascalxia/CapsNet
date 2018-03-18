@@ -117,7 +117,10 @@ def evaluation(model, supervisor, num_label):
         for i in tqdm(range(num_te_batch), total=num_te_batch, ncols=70, leave=False, unit='b'):
             start = i * cfg.batch_size
             end = start + cfg.batch_size
-            res = sess.run([model.accuracy, model.c_IJ, model.argmax_idx], {model.X: teX[start:end], model.labels: teY[start:end]})
+            
+            radian = np.array([10/180*3.14] * cfg.batch_size)
+            
+            res = sess.run([model.accuracy, model.c_IJ, model.argmax_idx], {model.X: teX[start:end], model.labels: teY[start:end], model.radian: radian})
             acc = res[0]
             c_IJ = res[1]
             argmax_idx = res[2]
