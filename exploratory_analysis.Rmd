@@ -1,0 +1,318 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(data.table)
+library(ggplot2)
+```
+
+
+
+```{r}
+actT = fread('routing.csv')
+actT[, trialId:=1:.N]
+actT[, inputId:=factor(inputId)]
+actT[, rotation:=rotation/pi*180]
+```
+
+
+```{r}
+actT
+```
+
+```{r}
+actLong = melt(actT, id.vars = c('trialId', 'label', 'prediction', 'inputId', 'rotation'))
+actLong[, channel:=factor(as.integer(sub('.*_', '', variable)))]
+actLong[, variable:=factor(sub('_.*', '', variable))]
+
+actLong = dcast(actLong, trialId+label+prediction+inputId+rotation+channel~variable, value.var = 'value')
+setnames(actLong, 'l', 'routing')
+actLong[, cosineRef:=pmin(cosineRef, 1)]
+
+actLong[, angle:=acos(cosine)/pi*180]
+actLong[, angleRef:=acos(cosineRef)/pi*180]
+
+actLong
+
+```
+
+```{r}
+hist(actLong$angleRef)
+```
+
+```{r}
+actT[inputId==1, label]
+```
+
+
+```{r}
+oneDigit = 2
+ggplot(actLong[label==oneDigit & channel%in%routingSig[.(oneDigit), channel],], 
+       aes(x=rotation, y=angleRef, group=paste(inputId, channel), color=inputId)) +
+  geom_line()
+```
+
+```{r}
+oneDigit = 2
+ggplot(actLong[inputId %in% c(77, 43) & channel%in%routingSig[.(oneDigit), channel],], 
+       aes(x=rotation, y=angleRef, group=paste(inputId, channel), color=inputId)) +
+  geom_line()
+```
+
+```{r}
+ggplot(actLong[inputId==77,], aes(x=channel, y=routing, group=trialId, color=rotation)) +
+  geom_line()
+```
+
+```{r}
+ggplot(actLong[inputId==43,], aes(x=channel, y=routing, group=trialId, color=rotation)) +
+  geom_line()
+```
+
+
+```{r}
+oneDigit = 2
+ggplot(actLong[label==oneDigit & channel%in%routingSig[.(oneDigit), channel],], 
+       aes(x=rotation, y=angle, group=paste(inputId, channel), color=inputId)) +
+  geom_line()
+```
+
+```{r}
+oneDigit = 2
+ggplot(actLong[inputId %in% c(77, 43) & channel%in%routingSig[.(oneDigit), channel],], 
+       aes(x=rotation, y=angle, group=paste(inputId, channel), color=inputId)) +
+  geom_line()
+```
+
+
+```{r}
+setkey(actLong, label, channel)
+inputSummary = actLong[routingSig[, .(label, channel)], .(variability=mean(angleRef), vulnerability=mean(angle)), keyby=.(inputId, channel, label)]
+```
+
+```{r}
+ggplot(inputSummary[channel==23&label==2], aes(x=variability, y=vulnerability)) + 
+  geom_point()
+```
+
+```{r}
+ggplot(inputSummary, aes(x=variability, y=vulnerability, color=channel)) + 
+  geom_point()
+```
+
+```{r}
+inputSummary[channel==13,]
+```
+
+```{r}
+oneDigit = 1
+ggplot(actLong[label==oneDigit & channel==13,], 
+       aes(x=rotation, y=angleRef, group=paste(inputId, channel), color=inputId)) +
+  geom_line()
+```
+
+```{r}
+oneDigit = 1
+ggplot(actLong[label==oneDigit & channel==13,], 
+       aes(x=rotation, y=angle, group=paste(inputId, channel), color=inputId)) +
+  geom_line()
+
+```
+
+
+
+
+```{r}
+ggplot(actLong[inputId==77&channel==23,], aes(x=channel, y=routing, group=trialId)) +
+  geom_line()
+```
+
+
+
+```{r}
+ggplot(actLong[label==1&rotation==0,], aes(x=channel, y=routing)) +
+  geom_point()
+```
+
+```{r}
+routingSummary = actLong[rotation==0, .(m=mean(routing), se=sd(routing)/sqrt(.N)), keyby=.(label, channel)]
+routingSummary[m>0.25,]
+routingSig = routingSummary[m>0.25,]
+```
+
+```{r}
+ggplot(actLong[inputId==1&,], aes(x=rotation, y=angleRef, color=channel)) +
+  geom_line()
+```
+
+```{r}
+ggplot(actLong[trialId==1,], aes(x=contribution, y=cosine)) +
+  geom_point()
+```
+
+
+
+```{r}
+actLong = melt(actT, id.vars = c('trialId', 'label', 'prediction', 'inputId'), variable.name = 'feature', value.name = 'routing')
+```
+
+
+```{r}
+ggplot(actLong, aes(x=routing)) +
+  geom_histogram() +
+  facet_wrap(~feature)
+```
+
+```{r}
+actLong[, logit:=log10(routing/(1-routing))]
+```
+
+
+```{r}
+ggplot(actLong, aes(x=logit)) +
+  geom_histogram() +
+  facet_wrap(~feature)
+```
+Some features win more often. Some features never win.
+
+```{r}
+ggplot(actLong, aes(x=logit)) +
+  geom_histogram() +
+  facet_wrap(~feature, scales = 'free')
+```
+
+```{r}
+ggplot(actLong, aes(x=feature, y=routing, group=trialId)) +
+  geom_line(alpha=0.05) +
+  facet_grid(prediction~.)
+```
+
+```{r}
+actT[, .N, by=.(label)]
+```
+
+```{r}
+ggplot(actLong[label=='8'], aes(x=feature, y=routing, group=trialId, color=inputId)) +
+  geom_line(alpha=0.2) +
+  guides(colour = guide_legend(override.aes = list(alpha=1)))
+```
+
+```{r}
+ggplot(actLong[label=='5'], aes(x=feature, y=routing, group=trialId, color=inputId)) +
+  geom_line(alpha=0.1) +
+  guides(colour = guide_legend(override.aes = list(alpha=1)))
+```
+
+
+
+```{r}
+ggplot(actLong, aes(x=feature, y=routing, group=trialId)) +
+  geom_line(alpha=0.05) +
+  facet_grid(prediction~.)
+```
+
+```{r}
+nExample = 10
+visualT = actT[, .SD[sample.int(.N, nExample)], by=.(label)]
+visualT[, exampleId:=factor(1:.N), by=.(label)]
+visualT = melt(visualT, id.vars = c('trialId', 'label', 'prediction', 'exampleId'), 
+               variable.name = 'feature', value.name = 'routing')
+
+ggplot(actLong, aes(x=feature, y=routing, group=trialId)) +
+  geom_line(alpha=0.04) +
+  facet_grid(prediction~.) +
+  geom_line(data=visualT, aes(group=exampleId, color=exampleId))
+  
+```
+
+```{r}
+ggplot(actLong[label=='2'], aes(x=feature, y=routing, group=trialId)) +
+  geom_line(alpha=0.05) +
+  geom_line(data=visualT[label=='2'], aes(group=exampleId, color=exampleId))
+```
+
+
+Do nc=2 k-means clustering
+```{r}
+actT[, cluster:=kmeans(.SD, centers=2)$cluster, by=.(prediction), .SDcols=paste0('l_', 1:32)]
+actT[, cluster:=factor(cluster)]
+```
+
+```{r}
+setkey(actT, trialId)
+actLong[, cluster:=actT[.(actLong$trialId), cluster]]
+```
+
+```{r}
+ggplot(actLong, aes(x=feature, y=routing, group=trialId, color=cluster)) +
+  geom_line(alpha=0.05) +
+  facet_grid(prediction~.)
+```
+
+
+
+
+Clustering for digit 2
+```{r}
+target = 5
+```
+
+```{r}
+library(fpc)
+```
+
+```{r}
+targetT = actT[prediction==target,]
+clus = pamk(targetT[, 3:34, with=FALSE])
+```
+
+```{r}
+clus
+```
+
+```{r}
+targetT[, cluster:=clus$pamobject$clustering]
+targetT[, cluster:=factor(cluster)]
+setkey(targetT, trialId)
+visualT = actLong[prediction==target,]
+visualT[, cluster:=targetT[.(visualT$trialId), cluster]]
+
+ggplot(visualT, aes(x=feature, y=routing, color=cluster, group=trialId)) +
+  geom_line(alpha=0.05)
+```
+
+
+
+
+
+PCA for digit 2
+```{r}
+target = 2
+```
+
+```{r}
+pr= prcomp(actT[prediction==target, 3:34, with=FALSE])
+```
+
+```{r}
+plot(pr)
+```
+
+```{r}
+visualT = actT[prediction==target,]
+visualT[, pc1:=pr$x[,1]]
+visualT[, pc2:=pr$x[,2]]
+```
+
+```{r}
+ggplot(visualT, aes(x=pc1, y=pc2)) +
+  geom_point()
+```
+
+
+
+
+
