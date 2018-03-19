@@ -8,6 +8,7 @@ import numpy as np
 import tensorflow as tf
 
 from config import cfg
+import pdb
 
 
 epsilon = 1e-9
@@ -90,10 +91,29 @@ class CapsLayer(object):
                     # b_IJ: [batch_size, num_caps_l, num_caps_l_plus_1, 1, 1],
                     # about the reason of using 'batch_size', see issue #21
                     b_IJ = tf.constant(np.zeros([cfg.batch_size, input.shape[1].value, self.num_outputs, 1, 1], dtype=np.float32))
-                    capsules, c_IJ = routing(self.input, b_IJ)
+                    capsules, c_IJ, cosines, contributions, u_hat = routing(self.input, b_IJ)
                     capsules = tf.squeeze(capsules, axis=1)
 
-            return(capsules, c_IJ)
+            return(capsules, c_IJ, cosines, contributions, u_hat)
+
+
+def cal_cosines(v_J, u_hat):
+    # reshape & tile v_j from [batch_size ,1, 10, 16, 1] to [batch_size, 1152, 10, 16, 1]
+    # then matmul in the last tow dim: [16, 1].T x [16, 1] => [1, 1], reduce mean in the
+    # batch_size dim, resulting in [1, 1152, 10, 1, 1]
+    
+    v_J_tiled = tf.tile(v_J, [1, 1152, 1, 1, 1])
+    u_produce_v = tf.matmul(u_hat, v_J_tiled, transpose_a=True)
+    assert u_produce_v.get_shape() == [cfg.batch_size, 1152, 10, 1, 1]
+    v_J_norm = tf.norm(v_J, axis = 3, keep_dims=True) #(None, 1, 10, 1, 1)
+    u_hat_norm = tf.norm(u_hat, axis = 3, keep_dims=True) #(None, 1152, 10, 1, 1)
+
+    projections = tf.divide(u_produce_v, v_J_norm) #(None, 1152, 10, 1, 1)
+    cosines = tf.divide(projections, u_hat_norm) #(None, 1152, 10, 1, 1)
+    contributions = tf.divide(projections, v_J_norm) #(None, 1152, 10, 1, 1)
+    
+    cosines = tf.divide(tf.divide(u_produce_v, v_J_norm), u_hat_norm)
+    return cosines, contributions
 
 
 def routing(input, b_IJ):
@@ -169,8 +189,10 @@ def routing(input, b_IJ):
 
                 # b_IJ += tf.reduce_sum(u_produce_v, axis=0, keep_dims=True)
                 b_IJ += u_produce_v
+                
+    cosines, contributions = cal_cosines(v_J, u_hat)
 
-    return(v_J, c_IJ)
+    return(v_J, c_IJ, cosines, contributions, u_hat)
 
 
 def squash(vector):

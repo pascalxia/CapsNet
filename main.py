@@ -104,8 +104,11 @@ def evaluation(model, supervisor, num_label):
         num_te_batch = cfg.num_batch
     
     #create the record table
-    act_table_name = 'activation.csv'
-    df0 = pd.DataFrame([], columns=['label', 'prediction'] + ['l_'+str(i+1) for i in range(32)])
+    act_table_name = 'routing.csv'
+    df0 = pd.DataFrame([], columns=['label', 'prediction'] + ['l_'+str(i+1) for i in range(32)] + ['inputId'] + ['rotation'] +\
+                                   ['cosine_'+str(i+1) for i in range(32)] + ['contribution_'+str(i+1) for i in range(32)] +\
+                                   ['cosineRef_'+str(i+1) for i in range(32)]
+                      )
     df0.to_csv(act_table_name, index=False)
     
     fd_test_acc = save_to()
@@ -114,22 +117,89 @@ def evaluation(model, supervisor, num_label):
         tf.logging.info('Model restored!')
 
         test_acc = 0
+        
+        #use the first batch only
+        start = 0 * cfg.batch_size
+        end = start + cfg.batch_size
+        
+        #fist without rotation
+        radian = np.zeros((cfg.batch_size,))
+        res = sess.run([model.c_IJ, model.argmax_idx, model.u_hat], 
+                       {model.origX: teX[start:end], model.labels: teY[start:end], model.radian: radian})
+        c_IJ = res[0]
+        argmax_idx = res[1] #(None,)
+        u_hat = res[2]
+        
+        
+        c_I = c_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32]) #(128, 36, 32)
+        max_inds = np.argmax(c_I, axis=1) #(None, 32)
+        temp_inds = np.indices((cfg.batch_size, 32))
+        inds = (temp_inds[0], max_inds, temp_inds[1])
+        
+        u_hat_I = u_hat[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32, 16]) #(128, 36, 32, 16)
+        u_hat_max = u_hat_I[inds]
+        
+        u_hat_max_ref = u_hat_max
+        norm_ref = np.linalg.norm(u_hat_max_ref, axis=2)
+    
+        
         for i in tqdm(range(num_te_batch), total=num_te_batch, ncols=70, leave=False, unit='b'):
-            start = i * cfg.batch_size
-            end = start + cfg.batch_size
+            #start = i * cfg.batch_size
+            #end = start + cfg.batch_size
             
-            radian = np.array([10/180*3.14] * cfg.batch_size)
+            if i==0:
+                radian = np.zeros((cfg.batch_size,))
+            else:
+                radian = np.random.uniform(-20, 20, size=(cfg.batch_size,))/180*np.pi
             
-            res = sess.run([model.accuracy, model.c_IJ, model.argmax_idx], {model.X: teX[start:end], model.labels: teY[start:end], model.radian: radian})
+            res = sess.run([model.accuracy, model.c_IJ, model.argmax_idx,
+                            model.cosines, model.contributions, model.u_hat], 
+                           {model.origX: teX[start:end], model.labels: teY[start:end], model.radian: radian})
             acc = res[0]
             c_IJ = res[1]
-            argmax_idx = res[2]
-            c_I = c_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32])
+            argmax_idx = res[2] #(None,)
+            cosines_IJ = res[3] #(None, 1152, 10, 1, 1)
+            contributions_IJ = res[4]
+            u_hat = res[5]
+            
+            c_I = c_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32]) #(128, 36, 32)
             #c_I.shape = [batch_size, 36, 32]
-            layer_I = np.max(c_I, axis=1)
+            #layer_I = np.max(c_I, axis=1)
+            max_inds = np.argmax(c_I, axis=1) #(None, 32)
+            temp_inds = np.indices((cfg.batch_size, 32))
+            inds = (temp_inds[0], max_inds, temp_inds[1])
+            
+            layer_I = c_I[inds]
+            
+            #for cosines
+            cosines_I = cosines_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32]) #(None, 36, 32)
+            cosines = cosines_I[inds]
+            
+            #for contributions
+            contributions_I = contributions_IJ[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32])
+            contributions = contributions_I[inds]
+            
+            #for cosines_ref
+            u_hat_I = u_hat[range(cfg.batch_size), :, argmax_idx].reshape([cfg.batch_size, -1, 32, 16]) #(128, 36, 32, 16)
+            u_hat_max = u_hat_I[inds]
+            
+            norm = np.linalg.norm(u_hat_max, axis=2)
+            
+            prod = np.sum(np.multiply(u_hat_max, u_hat_max_ref), axis=2)
+            
+            cosines_ref = prod/norm/norm_ref
+            
+            
+            
             df = np.concatenate((np.array([teY[start:end]]).T,
                                  np.array([argmax_idx]).T,
-                                 layer_I), axis=1)
+                                 layer_I,
+                                 np.arange(cfg.batch_size).reshape((-1,1)),
+                                 radian.reshape((-1,1)),
+                                 cosines,
+                                 contributions,
+                                 cosines_ref
+                                ), axis=1)
             
             test_acc += acc
             
