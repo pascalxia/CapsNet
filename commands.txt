@@ -1,0 +1,3 @@
+user-docker tf130_keras python main.py --is_training=False --num_batch=50
+
+user-docker tf130_keras python save_mnist_images.py --is_training=False
