@@ -7,6 +7,8 @@ output: html_notebook
 ```{r}
 library(data.table)
 library(ggplot2)
+library(cowplot)
+library(imager)
 ```
 
 
@@ -57,9 +59,14 @@ ggplot(actLong[label==oneDigit & channel%in%routingSig[.(oneDigit), channel],],
 
 ```{r}
 oneDigit = 2
-ggplot(actLong[inputId %in% c(77, 43) & channel%in%routingSig[.(oneDigit), channel],], 
+p1 = ggplot(actLong[inputId %in% c(77, 43) & channel%in%routingSig[.(oneDigit), channel],], 
        aes(x=rotation, y=angleRef, group=paste(inputId, channel), color=inputId)) +
-  geom_line()
+  geom_line() +
+  ylab(expression(paste('angle between ', bold(hat(u))[paste(italic(j),'|',italic(i))], ' and ', 
+                        bold(paste(hat('u'), '\'') )[paste(italic(j),'|',italic(i))], ' (in degrees)') )) +
+  xlab('input image rotation (in degrees)') +
+  scale_color_discrete(breaks=c('77', '43'), labels=c('1', '2'), name='input\nimage')
+p1
 ```
 
 ```{r}
@@ -82,9 +89,76 @@ ggplot(actLong[label==oneDigit & channel%in%routingSig[.(oneDigit), channel],],
 
 ```{r}
 oneDigit = 2
-ggplot(actLong[inputId %in% c(77, 43) & channel%in%routingSig[.(oneDigit), channel],], 
+p2 = ggplot(actLong[inputId %in% c(77, 43) & channel%in%routingSig[.(oneDigit), channel],], 
        aes(x=rotation, y=angle, group=paste(inputId, channel), color=inputId)) +
-  geom_line()
+  geom_line() +
+  ylab(expression(paste('angle between ', bold(paste(hat('u'), '\'') )[paste(italic(j),'|',italic(i))], ' and ', 
+                        bold(v)[italic(j)], ' (in degrees)')))+
+  xlab('input image rotation (in degrees)') +
+  scale_color_discrete(breaks=c('77', '43'), labels=c('1', '2'), name='input\nimage')
+p2
+```
+
+```{r}
+pAngle = plot_grid(p1, p2, labels = c('A', 'B'))
+pAngle
+```
+
+```{r}
+ggsave('figures/temp_plot.jpg', p, width=8.5, height=4)
+ggsave('figures/angle_curve.pdf', p, width=8.5, height=4)
+```
+
+
+
+```{r}
+plotImg = function(img){
+  df <- img %>% as.data.frame
+  p <- ggplot(df,aes(x,y))+
+    geom_raster(aes(fill=value)) +
+    scale_x_continuous(expand=c(0,0))+
+    scale_y_continuous(expand=c(0,0),trans=scales::reverse_trans()) +
+    scale_fill_gradient(low="black",high="white") +
+    coord_equal() + 
+    guides(fill=FALSE) +
+    theme_void()
+  return(p)
+}
+```
+
+
+```{r}
+img1 = load.image('mnist_images/77.jpg')
+p3 = plotImg(img1) + ggtitle('Input Image 1')
+
+img2 = load.image('mnist_images/43.jpg')
+p4 = plotImg(img2) + ggtitle('Input Image 2')
+
+pInput = plot_grid(p3, p4)
+pInput
+```
+
+
+```{r}
+ggsave('figures/temp_plot.jpg', p, width=5.7, height=3)
+```
+
+```{r}
+ggsave('figures/input_examples.pdf', p, width=5.7, height=3)
+```
+
+
+```{r}
+p = plot_grid(pInput, p1, p2, labels = c('A', 'B', 'C'), nrow=1, rel_widths=c(1,1,1))
+p
+```
+
+```{r}
+ggsave('figures/temp_plot.jpg', p, width=15, height=4)
+```
+
+```{r}
+ggsave('figures/combine.pdf', p, width=15, height=4)
 ```
 
 
